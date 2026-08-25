@@ -1,0 +1,18 @@
+[Unit]
+Description=RAGFlow - RAG 智能问答系统 Web 服务
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/ragflow
+Environment="PATH=/var/www/ragflow/.venv/bin"
+ExecStart=/var/www/ragflow/.venv/bin/python app.py --host 127.0.0.1 --port 7860
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ragflow
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,4 @@
+# Gradio Web 前端额外依赖
+# 安装方式: pip install -r requirements-gradio.txt
+
+gradio>=4.0.0
