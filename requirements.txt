@@ -12,6 +12,7 @@ openai>=2.0.0
 # 向量数据库
 langchain-chroma>=0.1.0
 chromadb>=0.5.0
+pysqlite3-binary>=0.5.0  # 兼容旧系统 sqlite3 版本（CentOS/Alibaba Cloud Linux）
 
 # 混合检索（BM25 关键词检索）
 rank_bm25>=0.2.0

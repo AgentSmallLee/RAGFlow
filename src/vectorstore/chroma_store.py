@@ -3,6 +3,16 @@ ChromaDB 向量存储实现
 轻量级、本地持久化，适合演示和小规模场景
 """
 
+# SQLite 版本兼容处理：
+# ChromaDB 要求 sqlite3 >= 3.35.0，但某些系统（如 CentOS 7、Alibaba Cloud Linux）
+# 自带的 sqlite 版本较旧。这里尝试用 pysqlite3-binary 替代系统 sqlite3。
+try:
+    import pysqlite3
+    import sys
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+except ImportError:
+    pass  # 没有安装就用系统的，版本够的话没问题
+
 from pathlib import Path
 from typing import List, Optional
 
