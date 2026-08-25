@@ -49,6 +49,172 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
         background: #f0fdf4;
         border: 1px solid #86efac;
     }
+    /* 智能滚动提示条 */
+    #scroll-hint {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 100;
+        display: none;
+    }
+    #scroll-hint.show {
+        display: block;
+    }
+    """
+
+    # ========== 智能滚动 JS ==========
+    # 用户向上滚动时暂停自动滚动，滚回底部或点提示按钮时恢复
+    scroll_js = """
+    (function() {
+        let scrollContainer = null;
+        let userScrolledUp = false;
+        let scrollHint = null;
+        let lastScrollTop = 0;
+        let chatbotEl = null;
+
+        function findScrollContainer() {
+            // 找到 chatbot 组件
+            chatbotEl = document.querySelector('#chatbot');
+            if (!chatbotEl) return null;
+
+            // 遍历所有后代元素，找有 overflow-y 且可滚动的容器
+            const all = chatbotEl.querySelectorAll('*');
+            for (const el of all) {
+                const style = window.getComputedStyle(el);
+                if ((style.overflowY === 'auto' || style.overflowY === 'scroll')
+                    && el.scrollHeight > el.clientHeight + 10) {
+                    return el;
+                }
+            }
+
+            // 兜底：找第一个 scrollHeight 大于 clientHeight 的元素
+            for (const el of all) {
+                if (el.scrollHeight > el.clientHeight + 50 && el.clientHeight > 100) {
+                    return el;
+                }
+            }
+
+            return null;
+        }
+
+        function createScrollHint() {
+            scrollHint = document.createElement('button');
+            scrollHint.id = 'scroll-hint';
+            scrollHint.textContent = '⬇ 有新消息';
+            scrollHint.style.cssText = `
+                position: absolute;
+                bottom: 15px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 1000;
+                padding: 6px 16px;
+                border-radius: 20px;
+                background: #3b82f6;
+                color: white;
+                border: none;
+                cursor: pointer;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+                font-size: 13px;
+                display: none;
+                transition: opacity 0.2s;
+            `;
+            scrollHint.onclick = (e) => {
+                e.stopPropagation();
+                if (scrollContainer) {
+                    scrollContainer.scrollTo({
+                        top: scrollContainer.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }
+            };
+            chatbotEl.style.position = 'relative';
+            chatbotEl.appendChild(scrollHint);
+        }
+
+        function isAtBottom() {
+            if (!scrollContainer) return true;
+            const distance = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
+            return distance < 60;
+        }
+
+        function scrollToBottom() {
+            if (scrollContainer && !userScrolledUp) {
+                scrollContainer.scrollTop = scrollContainer.scrollHeight;
+            }
+        }
+
+        function updateScrollHint() {
+            if (!scrollHint) return;
+            if (userScrolledUp) {
+                scrollHint.style.display = 'block';
+            } else {
+                scrollHint.style.display = 'none';
+            }
+        }
+
+        function init() {
+            scrollContainer = findScrollContainer();
+            if (!scrollContainer) {
+                setTimeout(init, 1000);
+                return;
+            }
+
+            // 创建提示按钮
+            if (!scrollHint) {
+                createScrollHint();
+            }
+
+            // 初始化状态
+            lastScrollTop = scrollContainer.scrollTop;
+            userScrolledUp = false;
+
+            // 监听滚动
+            scrollContainer.addEventListener('scroll', () => {
+                const scrollingUp = scrollContainer.scrollTop < lastScrollTop;
+                const atBottom = isAtBottom();
+
+                if (scrollingUp && !atBottom) {
+                    userScrolledUp = true;
+                    updateScrollHint();
+                }
+                if (atBottom) {
+                    userScrolledUp = false;
+                    updateScrollHint();
+                }
+
+                lastScrollTop = scrollContainer.scrollTop;
+            }, { passive: true });
+
+            // 监听内容变化，智能滚动
+            const observer = new MutationObserver(() => {
+                scrollToBottom();
+            });
+
+            observer.observe(scrollContainer, {
+                childList: true,
+                subtree: true,
+                characterData: true,
+            });
+
+            console.log('✅ Smart scroll initialized');
+        }
+
+        // 启动
+        function start() {
+            if (document.querySelector('#chatbot')) {
+                init();
+            } else {
+                setTimeout(start, 500);
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', start);
+        } else {
+            start();
+        }
+    })();
     """
 
     # ========== 事件处理函数 ==========
@@ -161,6 +327,9 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
         title="RAGFlow - 智能问答系统",
     ) as demo:
 
+        # 注入智能滚动 JS
+        gr.HTML(f"<script>{scroll_js}</script>")
+
         # 标题
         gr.Markdown(
             "# 🤖 RAGFlow\n基于 RAG 的智能问答系统",
@@ -251,6 +420,7 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
                             label="对话",
                             elem_id="chatbot",
                             show_label=False,
+                            autoscroll=False,  # 关闭自带自动滚动，用自定义智能滚动
                         )
 
                         with gr.Row():

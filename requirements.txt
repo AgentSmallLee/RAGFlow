@@ -8,6 +8,7 @@ langchain-text-splitters>=1.1.0
 # Embedding & LLM
 langchain-openai>=1.1.0
 openai>=2.0.0
+dashscope>=1.20.0  # 通义千问 Embedding/LLM（使用 text-embedding-v 系列模型时需要）
 
 # 向量数据库
 langchain-chroma>=0.1.0
