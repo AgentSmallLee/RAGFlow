@@ -325,10 +325,8 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
 
     with gr.Blocks(
         title="RAGFlow - 智能问答系统",
+        js=scroll_js,  # 用 Blocks 的 js 参数注入，Gradio 会正确执行
     ) as demo:
-
-        # 注入智能滚动 JS
-        gr.HTML(f"<script>{scroll_js}</script>")
 
         # 标题
         gr.Markdown(
