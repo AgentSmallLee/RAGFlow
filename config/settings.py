@@ -49,6 +49,18 @@ class Settings(BaseSettings):
     # 向量检索权重，仅 weighted 模式生效（BM25 权重 = 1 - vector_weight）
     hybrid_vector_weight: float = 0.7
 
+    # ========== 重排序 (Rerank) 配置 ==========
+    # 是否启用重排序（用交叉编码器对检索结果二次精排，提升准确率）
+    enable_rerank: bool = False
+    # Rerank 模型 API Key（留空则复用 embedding_api_key）
+    rerank_api_key: str = ""
+    # Rerank 模型名称（DashScope: gte-rerank）
+    rerank_model: str = "gte-rerank-v2"
+    # 精排后返回的文档数量（应小于等于 top_k）
+    rerank_top_n: int = 3
+    # Rerank 分数阈值（低于此值的结果被过滤）
+    rerank_threshold: float = 0.0
+
     # ========== 文档目录配置 ==========
     documents_dir: str = "./data/documents"
 

@@ -834,3 +834,125 @@ Python 实现：rank_bm25 库、elasticsearch、whoosh
 一句话：召回层负责"把相关的都捞出来"，
        精排层负责"把最相关的排前面"，
        生成层负责"用通顺的话回答用户"。
+
+==========================================================
+十四、实际开发中配置项怎么写？写在哪里？
+==========================================================
+
+【核心原则】配置分三层，各司其职：
+
+  代码默认值（settings.py） → 环境变量（.env） → 运行时动态调整（前端/API）
+
+每一层都可以覆盖上一层的值，越往后优先级越高。
+
+【第一层：代码默认值 → config/settings.py】
+
+放什么：
+  - 所有配置项的字段定义 + 默认值
+  - 非敏感配置（chunk_size、top_k、开关等）的合理默认值
+  - 敏感配置的默认值设为空字符串（""），不要填真实密钥
+
+为什么放这里：
+  - 是配置的"单一真相来源"，所有配置项都在这里声明
+  - 有类型提示（pydantic），写错类型会报错
+  - 有默认值的配置项可以直接用，不用每次都在 .env 里写
+  - 新人看这个文件就知道项目有哪些配置
+
+命名规范：
+  - Python 字段名：小写 + 下划线（snake_case）
+    例：llm_api_key、enable_rerank、chunk_size
+  - 自动对应环境变量：全大写（UPPER_SNAKE_CASE）
+    例：LLM_API_KEY、ENABLE_RERANK、CHUNK_SIZE
+
+【第二层：环境变量 → .env 文件 + .env.example】
+
+.env 文件放什么：
+  - 敏感信息（API Key、密码、Token 等）——必须放这里，不能提交
+  - 部署环境特有的值（比如生产环境的 LLM 模型名、向量库路径）
+  - 覆盖 settings.py 默认值的配置
+
+.env.example 文件放什么：
+  - 所有配置项的模板，值用占位符（如 your-api-key）或默认值
+  - 有注释说明每个配置的作用和可选值
+  - 这是配置文档，新人拿到项目看这个文件就知道怎么配置
+
+为什么需要 .env.example：
+  - .env 不提交（.gitignore 里排除），别人拉代码不知道要配置什么
+  - .env.example 提交到 git，作为配置清单和模板
+  - 使用方式：cp .env.example .env，然后填入真实值
+
+.env 书写规范：
+  - 变量名全大写 + 下划线
+  - KEY=VALUE 格式，等号两边不要有空格
+  - 值有特殊字符（空格、引号等）时加双引号
+  - # 开头是注释
+
+【第三层：运行时动态调整 → 前端参数面板 / API】
+
+放什么：
+  - 需要频繁调整、调优的参数（top_k、阈值、开关等）
+  - 不涉及密钥和基础设施的配置
+
+为什么需要：
+  - 调参不用改代码、不用重启服务
+  - 产品/运营人员也能操作
+  - 做 A/B 测试方便
+
+【配置分层的实际例子（以 Rerank 为例）】
+
+  settings.py 中定义：
+    enable_rerank: bool = False          ← 默认关闭
+    rerank_model: str = "gte-rerank-v2"  ← 默认模型
+    rerank_top_n: int = 3                ← 默认返回 3 条
+
+  .env 中覆盖（部署级）：
+    ENABLE_RERANK=true                   ← 这个环境默认开启
+    RERANK_API_KEY=sk-xxx                ← 敏感信息，放这里
+
+  前端面板（运行时）：
+    用户可以随时开关 Rerank、调整 top_n ← 运行时动态调整
+
+【配置项的命名建议】
+
+  1. 布尔开关用 enable_ / is_ / has_ 开头
+     例：enable_rerank、enable_hybrid_search、is_production
+
+  2. 同类配置用统一的前缀
+     例：llm_xxx、embedding_xxx、rerank_xxx
+     好处：一眼就知道属于哪个模块，排序后聚在一起
+
+  3. 数量/大小用 _size / _count / _num 后缀
+     例：chunk_size、top_k、max_tokens
+
+  4. 阈值用 _threshold 后缀
+     例：similarity_threshold、rerank_threshold
+
+  5. 路径用 _path / _dir 后缀
+     例：vector_db_path、documents_dir
+
+【常见误区】
+
+  ❌ 误区 1：把 API Key 直接写在 settings.py 里
+     → 泄露风险！settings.py 会提交到 git
+
+  ❌ 误区 2：配置项散落在代码各处，没有统一管理
+     → 维护噩梦，改配置要翻遍整个代码
+
+  ❌ 误区 3：.env.example 不更新，加了新配置别人不知道
+     → 加新配置时，记得同步更新 .env.example
+
+  ❌ 误区 4：配置名随意，一会儿 camelCase 一会儿 snake_case
+     → 容易拼错、找不到，统一风格很重要
+
+  ✅ 正确做法：
+     所有配置 → 在 settings.py 声明
+     敏感/环境特有 → .env 覆盖
+     配置模板 → .env.example 同步更新
+     需要动态调 → 前端/API 暴露参数
+
+【本项目的配置文件位置】
+
+  配置定义：    config/settings.py   （pydantic-settings，已提交）
+  环境变量：    .env                 （真实密钥，不提交）
+  配置模板：    .env.example         （模板 + 注释，已提交）
+  运行时调整：  web/gradio_app/app.py 左侧参数面板

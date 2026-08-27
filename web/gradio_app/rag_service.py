@@ -13,6 +13,8 @@ from src.embedding import OpenAIEmbedding
 from src.embedding.base import BaseEmbedding
 from src.loader import DocumentLoader
 from src.rag import RAGChain, RAGResponse, Retriever
+from src.reranker import DashScopeReranker
+from src.reranker.base import BaseReranker
 from src.splitter import RecursiveSplitter
 from src.utils import logger
 from src.vectorstore import create_vector_store
@@ -31,6 +33,7 @@ class RAGService:
     def __init__(self):
         # 组件实例（按策略缓存）
         self._embedding: Optional[BaseEmbedding] = None
+        self._reranker: Optional[BaseReranker] = None
         self._vector_store: Optional[BaseVectorStore] = None
         self._rag_chain: Optional[RAGChain] = None
         self._loader = DocumentLoader()
@@ -59,18 +62,27 @@ class RAGService:
             self._embedding = OpenAIEmbedding()
             logger.info(f"Embedding 模型就绪: {settings.embedding_model}")
 
-        # 2. 创建向量库
+        # 2. 创建 Reranker（只创建一次，永久缓存）
+        if self._reranker is None:
+            self._reranker = DashScopeReranker()
+            logger.info(f"Reranker 就绪: {settings.rerank_model}")
+
+        # 3. 创建向量库
         self._vector_store = create_vector_store(embedding=self._embedding)
         logger.info(f"向量库就绪，现有 {self._vector_store.count()} 个文档块")
 
-        # 3. 创建切分器
+        # 4. 创建切分器
         self._splitter = RecursiveSplitter()
 
-        # 4. 创建检索器和 RAGChain
+        # 5. 创建检索器和 RAGChain
         retriever = Retriever(
             vector_store=self._vector_store,
             top_k=settings.top_k,
             similarity_threshold=settings.similarity_threshold,
+            reranker=self._reranker,
+            rerank_top_n=settings.rerank_top_n,
+            rerank_threshold=settings.rerank_threshold,
+            enable_rerank=settings.enable_rerank,
         )
         self._rag_chain = RAGChain(
             retriever=retriever,
@@ -87,6 +99,8 @@ class RAGService:
             "enable_hybrid_search": settings.enable_hybrid_search,
             "hybrid_fusion_method": settings.hybrid_fusion_method,
             "hybrid_vector_weight": settings.hybrid_vector_weight,
+            "enable_rerank": settings.enable_rerank,
+            "rerank_top_n": settings.rerank_top_n,
             "chunk_size": settings.chunk_size,
             "chunk_overlap": settings.chunk_overlap,
         }
@@ -104,6 +118,8 @@ class RAGService:
         enable_hybrid_search: bool,
         hybrid_fusion_method: str,
         hybrid_vector_weight: float,
+        enable_rerank: bool,
+        rerank_top_n: int,
         chunk_size: int,
         chunk_overlap: int,
     ) -> str:
@@ -154,25 +170,33 @@ class RAGService:
                 self._vector_store = create_vector_store(embedding=self._embedding)
                 logger.info("向量库已重建")
 
-            # 检测检索/RAG 链参数变化
+            # 检测检索/RAG 链参数变化（包括 rerank 参数）
             if (
                 top_k != old["top_k"]
                 or similarity_threshold != old["similarity_threshold"]
                 or enable_query_rewrite != old["enable_query_rewrite"]
                 or rewrite_on_empty_only != old["rewrite_on_empty_only"]
+                or enable_rerank != old["enable_rerank"]
+                or rerank_top_n != old["rerank_top_n"]
                 or need_rebuild_chain
             ):
                 retriever = Retriever(
                     vector_store=self._vector_store,
                     top_k=top_k,
                     similarity_threshold=similarity_threshold,
+                    reranker=self._reranker,
+                    rerank_top_n=rerank_top_n,
+                    enable_rerank=enable_rerank,
                 )
                 self._rag_chain = RAGChain(
                     retriever=retriever,
                     enable_query_rewrite=enable_query_rewrite,
                     rewrite_on_empty_only=rewrite_on_empty_only,
                 )
-                logger.info("检索器和 RAG 链已重建")
+                logger.info(
+                    f"检索器和 RAG 链已重建 (rerank={'开启' if enable_rerank else '关闭'}, "
+                    f"rerank_top_n={rerank_top_n})"
+                )
 
             # 如果需要重建索引（混合检索切换）
             reindex_msg = ""
@@ -189,6 +213,8 @@ class RAGService:
                 "enable_hybrid_search": enable_hybrid_search,
                 "hybrid_fusion_method": hybrid_fusion_method,
                 "hybrid_vector_weight": hybrid_vector_weight,
+                "enable_rerank": enable_rerank,
+                "rerank_top_n": rerank_top_n,
                 "chunk_size": chunk_size,
                 "chunk_overlap": chunk_overlap,
             })
@@ -362,6 +388,13 @@ class RAGService:
         if not UPLOAD_DIR.exists():
             return []
         return sorted([f.name for f in UPLOAD_DIR.iterdir() if f.is_file()])
+
+    def get_builtin_file_list(self) -> List[str]:
+        """获取预置文档列表（data/documents 目录）"""
+        docs_path = settings.documents_path
+        if not docs_path.exists():
+            return []
+        return sorted([f.name for f in docs_path.iterdir() if f.is_file()])
 
     def get_total_documents(self) -> int:
         """获取向量库中文档块总数"""

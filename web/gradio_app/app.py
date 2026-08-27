@@ -264,6 +264,8 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
             hybrid_check: settings.enable_hybrid_search,
             fusion_dropdown: settings.hybrid_fusion_method,
             vector_weight_slider: settings.hybrid_vector_weight,
+            rerank_check: settings.enable_rerank,
+            rerank_top_n_slider: settings.rerank_top_n,
             chunk_size_slider: settings.chunk_size,
             chunk_overlap_slider: settings.chunk_overlap,
             status_text: "已重置为默认参数",
@@ -271,7 +273,9 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
 
     def apply_params(
         top_k_val, threshold_val, qr_val, re_val,
-        hs_val, fm_val, vw_val, cs_val, co_val
+        hs_val, fm_val, vw_val,
+        rerank_val, rerank_top_n_val,
+        cs_val, co_val,
     ):
         """应用参数变更"""
         try:
@@ -283,6 +287,8 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
                 enable_hybrid_search=hs_val,
                 hybrid_fusion_method=fm_val,
                 hybrid_vector_weight=vw_val,
+                enable_rerank=rerank_val,
+                rerank_top_n=rerank_top_n_val,
                 chunk_size=cs_val,
                 chunk_overlap=co_val,
             )
@@ -316,25 +322,39 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
 
     def refresh_docs_info():
         """刷新文档信息"""
-        files = service.get_uploaded_file_list()
+        builtin_files = service.get_builtin_file_list()
+        uploaded_files = service.get_uploaded_file_list()
         total = service.get_total_documents()
-        files_str = "\n".join([f"- {f}" for f in files]) if files else "（暂无上传文件）"
-        return f"📊 向量库文档块总数: **{total}**\n\n📁 已上传文件:\n{files_str}"
+        builtin_str = (
+            "\n".join([f"- {f}" for f in builtin_files])
+            if builtin_files
+            else "（暂无预置文档）"
+        )
+        uploaded_str = (
+            "\n".join([f"- {f}" for f in uploaded_files])
+            if uploaded_files
+            else "（暂无上传文件）"
+        )
+        return (
+            f"📊 向量库文档块总数: **{total}**\n\n"
+            f"📚 预置文档:\n{builtin_str}\n\n"
+            f"📤 已上传文件:\n{uploaded_str}"
+        )
 
     # ========== 界面构建 ==========
 
     with gr.Blocks(
-        title="RAGFlow - 智能问答系统",
+        title="企业制度问答助手",
         js=scroll_js,  # 用 Blocks 的 js 参数注入，Gradio 会正确执行
     ) as demo:
 
         # 标题
         gr.Markdown(
-            "# 🤖 RAGFlow\n基于 RAG 的智能问答系统",
+            "# 🏢 企业制度问答助手",
             elem_classes=["app-title"],
         )
         gr.Markdown(
-            "支持文档上传、混合检索、查询改写、流式输出",
+            "员工手册 & 考勤管理制度 智能查询",
             elem_classes=["app-subtitle"],
         )
 
@@ -386,6 +406,19 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
                         value=params["hybrid_vector_weight"],
                         label="向量检索权重",
                         info="仅 weighted 模式生效，BM25 权重 = 1 - 向量权重",
+                    )
+
+                    gr.Markdown("#### 📊 重排序")
+                    rerank_check = gr.Checkbox(
+                        value=params["enable_rerank"],
+                        label="启用重排序",
+                        info="用交叉编码器对结果二次精排",
+                    )
+                    rerank_top_n_slider = gr.Slider(
+                        minimum=1, maximum=10, step=1,
+                        value=params["rerank_top_n"],
+                        label="精排后返回数量 (top_n)",
+                        info="应小于等于返回结果数 top_k",
                     )
 
                     gr.Markdown("#### 📄 文本切分")
@@ -519,6 +552,7 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
                 top_k_slider, threshold_slider,
                 query_rewrite_check, rewrite_empty_check,
                 hybrid_check, fusion_dropdown, vector_weight_slider,
+                rerank_check, rerank_top_n_slider,
                 chunk_size_slider, chunk_overlap_slider,
             ],
             outputs=[status_text, docs_info],
@@ -529,6 +563,7 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
                 top_k_slider, threshold_slider,
                 query_rewrite_check, rewrite_empty_check,
                 hybrid_check, fusion_dropdown, vector_weight_slider,
+                rerank_check, rerank_top_n_slider,
                 chunk_size_slider, chunk_overlap_slider,
                 status_text,
             ],
