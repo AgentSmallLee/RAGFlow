@@ -345,7 +345,6 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
 
     with gr.Blocks(
         title="企业制度问答助手",
-        js=scroll_js,  # 用 Blocks 的 js 参数注入，Gradio 会正确执行
     ) as demo:
 
         # 标题
@@ -583,10 +582,11 @@ def create_gradio_app(service: RAGService) -> gr.Blocks:
             outputs=[upload_status, docs_info],
         )
 
-    # Gradio 6.0+: theme 和 css 通过 launch() 传入
+    # Gradio 6.0+: theme / css / js 均通过 launch() 传入
     demo.launch_kwargs = {
         "theme": gr.themes.Soft(),
         "css": custom_css,
+        "js": scroll_js,
     }
 
     return demo
